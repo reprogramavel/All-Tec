@@ -50,6 +50,7 @@ const {
   removeServerFromBlacklist,
   isServerBlacklisted,
 } = require('./services/blacklistStore');
+const { getTheme, getThemeId, getAllThemes, saveTheme, THEMES } = require('./services/themeStore');
 
 // Rate-limit manager global (partilhado entre todas as operações)
 const rateLimitManager = new RateLimitManager();
@@ -430,8 +431,6 @@ async function runGuildCleanup(client) {
     messagesPath = candidatePaths.find(candidate => fs.existsSync(candidate)) || null;
 
     if (!messagesPath) {
-      console.log(chalk.redBright('\n❌ Pasta "Mensagens" não encontrada dentro do ZIP.'));
-    if (!fs.existsSync(messagesPath)) {
       console.log(chalk.redBright('\n   Pasta "Mensagens" não encontrada dentro do ZIP.'));
       console.log(chalk.gray('   Certifique-se que o ZIP é um export válido do Discord.'));
       await delay(3000);
@@ -826,16 +825,52 @@ async function runViewBlacklists() {
   await delay(4000);
 }
 
+// ====================== SELETOR DE TEMAS ======================
+async function runThemeSelector(client) {
+  const themes = getAllThemes();
+  const currentThemeId = getThemeId();
+
+  const options = Object.entries(themes).map(([id, theme]) => {
+    const active = id === currentThemeId ? ' (ativo)' : '';
+    return {
+      label: `${theme.name} — ${theme.description}${active}`,
+      value: id,
+    };
+  });
+  options.push({ label: 'Voltar', value: 'back' });
+
+  const selected = await selectMenu({
+    title: 'Temas',
+    subtitle: 'Escolha um tema para personalizar as cores do All-TEC',
+    options,
+    header: () => {
+      printBanner();
+      printAccessGranted(client.user.username);
+    },
+  });
+
+  if (selected === 'back') return;
+
+  saveTheme(selected);
+  const newTheme = themes[selected];
+  clearConsole();
+  printBanner();
+  console.log(newTheme.banner(`\n   Tema "${newTheme.name}" aplicado com sucesso!\n`));
+  await delay(2000);
+}
+
 // ====================== CONFIGURAÇÕES ======================
 async function runSettings(client) {
   while (true) {
+    const currentTheme = THEMES[getThemeId()];
     const option = await selectMenu({
       title: 'Configurações',
-      subtitle: 'Gerir blacklists e ações em massa',
+      subtitle: `Gerir blacklists e personalização • Tema: ${currentTheme.name}`,
       options: [
         { label: 'Blacklist de Utilizadores', value: 'bl_users' },
         { label: 'Blacklist de Servidores', value: 'bl_servers' },
         { label: 'Ver todas as Blacklists', value: 'bl_view' },
+        { label: `Temas (atual: ${currentTheme.name})`, value: 'themes' },
         { label: 'Voltar', value: 'back' },
       ],
       header: () => {
@@ -858,6 +893,11 @@ async function runSettings(client) {
 
     if (option === 'bl_view') {
       await runViewBlacklists();
+      continue;
+    }
+
+    if (option === 'themes') {
+      await runThemeSelector(client);
       continue;
     }
   }

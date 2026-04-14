@@ -1,48 +1,53 @@
 const readline = require('readline');
 const chalk = require('chalk');
+const { getTheme } = require('../services/themeStore');
 
 function renderMenu(title, subtitle, options, selectedIndex, header) {
+  const theme = getTheme();
+
   if (typeof header === 'function') {
     header();
   }
 
-  console.log(chalk.cyanBright.bold(`\n${title}\n`));
+  console.log(theme.title(`\n${title}\n`));
 
   if (subtitle) {
-    console.log(chalk.gray(`${subtitle}\n`));
+    console.log(theme.muted(`${subtitle}\n`));
   }
 
   options.forEach((option, index) => {
     const isSelected = index === selectedIndex;
-    const prefix = isSelected ? chalk.greenBright('›') : chalk.gray(' ');
-    const label = isSelected ? chalk.greenBright.bold(option.label) : chalk.white(option.label);
+    const prefix = isSelected ? theme.selected('›') : theme.muted(' ');
+    const label = isSelected ? theme.selected(option.label) : chalk.white(option.label);
     console.log(`${prefix} ${label}`);
   });
 
-  console.log(chalk.gray('\n↑ ↓ para navegar • Enter para confirmar'));
+  console.log(theme.muted('\n↑ ↓ para navegar • Enter para confirmar'));
 }
 
 function renderMultiSelectMenu(title, subtitle, options, selectedIndex, selectedValues, header) {
+  const theme = getTheme();
+
   if (typeof header === 'function') {
     header();
   }
 
-  console.log(chalk.cyanBright.bold(`\n${title}\n`));
+  console.log(theme.title(`\n${title}\n`));
 
   if (subtitle) {
-    console.log(chalk.gray(`${subtitle}\n`));
+    console.log(theme.muted(`${subtitle}\n`));
   }
 
   options.forEach((option, index) => {
     const isActive = index === selectedIndex;
     const isMarked = selectedValues.has(option.value);
-    const cursor = isActive ? chalk.greenBright('›') : chalk.gray(' ');
-    const marker = isMarked ? chalk.greenBright('[x]') : chalk.gray('[ ]');
-    const label = isActive ? chalk.greenBright.bold(option.label) : chalk.white(option.label);
+    const cursor = isActive ? theme.selected('›') : theme.muted(' ');
+    const marker = isMarked ? theme.selected('[x]') : theme.muted('[ ]');
+    const label = isActive ? theme.selected(option.label) : chalk.white(option.label);
     console.log(`${cursor} ${marker} ${label}`);
   });
 
-  console.log(chalk.gray('\nEspaço marca/desmarca • Enter confirma'));
+  console.log(theme.muted('\nEspaço marca/desmarca • Enter confirma'));
 }
 
 function selectMenu({ title, subtitle, options, initialIndex = 0, header }) {
