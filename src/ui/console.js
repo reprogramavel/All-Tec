@@ -79,6 +79,51 @@ function printInvalidToken() {
 }
 
 function askToken(rl, handler) {
+  // No Linux, esconder o input da token por segurança (como uma password)
+  if (process.platform === 'linux' && process.stdin.isTTY) {
+    process.stdout.write(chalk.yellow('\n   Insira sua token: '));
+    const stdin = process.stdin;
+    const wasRaw = stdin.isRaw;
+
+    stdin.setRawMode(true);
+    stdin.resume();
+    stdin.setEncoding('utf8');
+
+    let token = '';
+    const onData = (char) => {
+      // Enter - confirmar
+      if (char === '\n' || char === '\r') {
+        stdin.setRawMode(wasRaw || false);
+        stdin.removeListener('data', onData);
+        stdin.pause();
+        process.stdout.write('\n');
+        handler(token);
+        return;
+      }
+      // Ctrl+C - sair
+      if (char === '\u0003') {
+        stdin.setRawMode(wasRaw || false);
+        process.exit(0);
+      }
+      // Backspace
+      if (char === '\u007F' || char === '\b') {
+        if (token.length > 0) {
+          token = token.slice(0, -1);
+          process.stdout.write('\b \b');
+        }
+        return;
+      }
+      // Ignorar outros caracteres de controle
+      if (char.charCodeAt(0) < 32) return;
+
+      token += char;
+      process.stdout.write('*');
+    };
+
+    stdin.on('data', onData);
+    return;
+  }
+
   rl.question(chalk.yellow('\n   Insira sua token: '), handler);
 }
 
