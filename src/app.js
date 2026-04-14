@@ -163,7 +163,8 @@ async function runSingleChannelCleanup(client) {
 
 // ====================== CL ALL - MENU MAIS EXPLICATIVO ======================
 async function runGuildCleanup(client) {
-  const scopes = await selectMultiMenu({
+  const availableScopes = ['dms', 'group_dms', 'guilds'];
+  const selectedScopes = await selectMultiMenu({
     title: 'CL ALL - Limpeza em Massa',
     subtitle: 'Selecione os tipos de canais que deseja limpar (use Espaço para marcar)',
     options: [
@@ -182,9 +183,10 @@ async function runGuildCleanup(client) {
     ],
     header: () => {
       printBanner();
-      printAccessGranted(client.user.username);
-    },
+        printAccessGranted(client.user.username);
+      },
   });
+  const scopes = selectedScopes.length > 0 ? selectedScopes : availableScopes;
 
   const whitelistInput = await promptUser(askWhitelist);
   const whitelist = whitelistInput
@@ -193,7 +195,7 @@ async function runGuildCleanup(client) {
     .filter(Boolean);
 
   console.log('\nConfiguração selecionada:');
-  console.log(`Escopos: ${scopes.length > 0 ? scopes.join(', ') : 'nenhum selecionado'}`);
+  console.log(`Escopos: ${scopes.join(', ')}${selectedScopes.length === 0 ? ' (padrão: todos)' : ''}`);
   console.log(`WhiteList (${whitelist.length} IDs): ${whitelist.length > 0 ? whitelist.join(', ') : 'vazia'}`);
 
   await delay(1800);
@@ -215,9 +217,14 @@ async function runGuildCleanup(client) {
     tempDir = path.join(process.cwd(), `temp_messages_${Date.now()}`);
     zip.extractAllTo(tempDir, true);
 
-    messagesPath = path.join(tempDir, 'package', 'Mensagens');
+    const candidatePaths = [
+      path.join(tempDir, 'package', 'Mensagens'),
+      path.join(tempDir, 'Mensagens'),
+    ];
 
-    if (!fs.existsSync(messagesPath)) {
+    messagesPath = candidatePaths.find(candidate => fs.existsSync(candidate)) || null;
+
+    if (!messagesPath) {
       console.log(chalk.redBright('\n❌ Pasta "Mensagens" não encontrada dentro do ZIP.'));
       await delay(3000);
       return;
