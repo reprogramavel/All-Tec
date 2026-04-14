@@ -353,7 +353,8 @@ async function runSingleChannelCleanup(client) {
 
 // ====================== CL ALL - LIMPEZA EM MASSA ======================
 async function runGuildCleanup(client) {
-  const scopes = await selectMultiMenu({
+  const availableScopes = ['dms', 'group_dms', 'guilds'];
+  const selectedScopes = await selectMultiMenu({
     title: 'CL ALL - Limpeza em Massa',
     subtitle: 'Selecione os tipos de canais que deseja limpar (use Espaço para marcar)',
     options: [
@@ -372,9 +373,10 @@ async function runGuildCleanup(client) {
     ],
     header: () => {
       printBanner();
-      printAccessGranted(client.user.username);
-    },
+        printAccessGranted(client.user.username);
+      },
   });
+  const scopes = selectedScopes.length > 0 ? selectedScopes : availableScopes;
 
   if (scopes.length === 0) {
     console.log(chalk.yellow('\n   Nenhum escopo selecionado. Voltando...'));
@@ -388,6 +390,9 @@ async function runGuildCleanup(client) {
     .map(item => item.trim())
     .filter(Boolean);
 
+  console.log('\nConfiguração selecionada:');
+  console.log(`Escopos: ${scopes.join(', ')}${selectedScopes.length === 0 ? ' (padrão: todos)' : ''}`);
+  console.log(`WhiteList (${whitelist.length} IDs): ${whitelist.length > 0 ? whitelist.join(', ') : 'vazia'}`);
   const filter = (await promptUser(askFilter)).trim() || null;
 
   console.log(chalk.cyanBright('\n   Configuração selecionada:'));
@@ -417,8 +422,15 @@ async function runGuildCleanup(client) {
     tempDir = path.join(process.cwd(), `temp_messages_${Date.now()}`);
     zip.extractAllTo(tempDir, true);
 
-    messagesPath = path.join(tempDir, 'package', 'Mensagens');
+    const candidatePaths = [
+      path.join(tempDir, 'package', 'Mensagens'),
+      path.join(tempDir, 'Mensagens'),
+    ];
 
+    messagesPath = candidatePaths.find(candidate => fs.existsSync(candidate)) || null;
+
+    if (!messagesPath) {
+      console.log(chalk.redBright('\n❌ Pasta "Mensagens" não encontrada dentro do ZIP.'));
     if (!fs.existsSync(messagesPath)) {
       console.log(chalk.redBright('\n   Pasta "Mensagens" não encontrada dentro do ZIP.'));
       console.log(chalk.gray('   Certifique-se que o ZIP é um export válido do Discord.'));
@@ -1120,3 +1132,4 @@ async function startApp() {
 module.exports = {
   startApp,
 };
+
