@@ -430,7 +430,7 @@ async function runGuildCleanup(client) {
 
     messagesPath = candidatePaths.find(candidate => fs.existsSync(candidate)) || null;
 
-    if (!messagesPath) {
+    if (!messagesPath || !fs.existsSync(messagesPath)) {
       console.log(chalk.redBright('\n   Pasta "Mensagens" não encontrada dentro do ZIP.'));
       console.log(chalk.gray('   Certifique-se que o ZIP é um export válido do Discord.'));
       await delay(3000);
@@ -1172,4 +1172,3 @@ async function startApp() {
 module.exports = {
   startApp,
 };
-
