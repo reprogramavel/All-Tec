@@ -22,10 +22,11 @@ async function fetchTextChannelsFromGuild(client, guildId) {
     .map((channel) => channel);
 }
 
-async function collectOwnMessages(channel, userId) {
+async function collectOwnMessages(channel, userId, filter) {
   const allMessages = [];
   let lastMessageId;
   let fetched;
+  const filterLower = filter ? filter.toLowerCase() : null;
 
   do {
     const options = { limit: 100 };
@@ -34,7 +35,14 @@ async function collectOwnMessages(channel, userId) {
     }
 
     fetched = await channel.messages.fetch(options);
-    const userMessages = fetched.filter((message) => message.author.id === userId);
+    const userMessages = fetched.filter((message) => {
+      if (message.author.id !== userId) return false;
+      if (filterLower) {
+        const content = (message.content || '').toLowerCase();
+        return content.includes(filterLower);
+      }
+      return true;
+    });
     allMessages.push(...userMessages.values());
 
     if (fetched.size > 0) {

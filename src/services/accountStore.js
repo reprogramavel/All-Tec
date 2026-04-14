@@ -56,7 +56,24 @@ function saveAccount(name, token) {
   fs.writeFileSync(accountsFile, JSON.stringify({ accounts }, null, 2));
 }
 
+function deleteAccount(name) {
+  const normalizedName = String(name || '').trim().toLowerCase();
+  if (!normalizedName) return false;
+
+  const accounts = readAccounts();
+  const filtered = accounts.filter(
+    (account) => account.name.toLowerCase() !== normalizedName
+  );
+
+  if (filtered.length === accounts.length) return false;
+
+  ensureStore();
+  fs.writeFileSync(accountsFile, JSON.stringify({ accounts: filtered }, null, 2));
+  return true;
+}
+
 module.exports = {
   readAccounts,
   saveAccount,
+  deleteAccount,
 };

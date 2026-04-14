@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node:*)",
+      "Read(//c/Users/vasco/Documents/All-Tec/$APPDATA/discord/Local Storage/**)",
+      "Read(//c/Users/vasco/Documents/All-Tec/$APPDATA/discordptb/Local Storage/**)",
+      "Read(//c/Users/vasco/Documents/All-Tec/$APPDATA/discordcanary/Local Storage/**)",
+      "Read(//c/Users/vasco/Documents/All-Tec/$LOCALAPPDATA/Google/Chrome/User Data/Default/Local Storage/**)",
+      "Read(//c/Users/vasco/Documents/All-Tec/$LOCALAPPDATA/Microsoft/Edge/User Data/Default/Local Storage/**)",
+      "Read(//c/Users/vasco/Documents/All-Tec/$LOCALAPPDATA/BraveSoftware/Brave-Browser/User Data/Default/Local Storage/**)"
+    ]
+  }
+}
